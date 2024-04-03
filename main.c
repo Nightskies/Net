@@ -1,5 +1,6 @@
 #include "ARP/arp.h"
 #include "Ping/ping.h"
+#include "DNS/dns.h"
 
 #include "error.h"
 
@@ -15,6 +16,7 @@ const struct option long_opts[] = {
     {"help", no_argument, 0, 'h'},
     {"arp", required_argument, 0, 1},
     {"ping", required_argument, 0, 2},
+	{"dns", required_argument, 0, 3},
 };
 
 void help_menu(void)
@@ -27,6 +29,7 @@ void help_menu(void)
     puts("program types:");
     puts("  -arp <dst ip>           Send simple arp");
     puts("  -ping <remote host>     Send simple ping");
+	puts("  -dns <host name> <req type> Resolve host name");
 }
 
 bool check_root(void)
@@ -62,6 +65,10 @@ s32 main(s32 argc, s8 *argv[])
     			}
 				ping_init();
 				ping_test(optarg);
+				break;
+			case 3:
+				dns_resolve(optarg, argv[optind]);
+				break;
 		  	case '?':
 		  	default:
 				help_menu();
