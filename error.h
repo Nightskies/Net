@@ -7,4 +7,6 @@ void error(const s8 *msg);
 
 void sys_error(void);
 
+void gai_error(void);
+
 #endif // ERROR_H

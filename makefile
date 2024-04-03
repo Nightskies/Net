@@ -1,5 +1,5 @@
 CFLAGS=-Wall
-EXE=arp
+EXE=net
 
 SRC_DIRS := .
 

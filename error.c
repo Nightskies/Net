@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <netdb.h>
 
 void error(const s8* msg)
 {
@@ -15,4 +16,9 @@ void error(const s8* msg)
 void sys_error(void)
 {
     error(strerror(errno));
+}
+
+void gai_error(void)
+{
+    error(gai_strerror(errno));
 }
