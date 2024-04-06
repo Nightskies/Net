@@ -1,18 +1,27 @@
-CFLAGS=-Wall
-EXE=net
+CFLAGS := -Wall
 
-SRC_DIRS := .
+EXE := net
 
-SOURCES := $(shell find $(SRC_DIRS) -name '*.c')
-OBJECTS=$(patsubst %.c,%.o,$(SOURCES))
+SRC_DIR := ./Src
+BUILD_DIR := ./Build
 
-all: $(EXE)
+SRCS := $(shell find $(SRC_DIRS) -name '*.c')
+OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
+DEPS := $(OBJS:.o=.d)
 
-$(EXE): $(OBJECTS)
-	$(CC) -o $@ $^
+INC_DIRS := $(shell find $(SRC_DIR) -type d)
+INC_FLAGS := $(addprefix -I,$(INC_DIRS))
+CPPFLAGS := $(INC_FLAGS) -MMD -MP
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD_DIR)/$(EXE): $(OBJS)
+	$(CC) $(OBJS) -o $@
 
+$(BUILD_DIR)/%.c.o: %.c
+	mkdir -p $(dir $@)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+.PHONY:	clean
 clean:
 	rm -rf $(EXE) $(OBJECTS)
+
+-include $(DEPS)
