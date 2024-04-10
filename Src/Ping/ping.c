@@ -2,16 +2,15 @@
 #include "../net_hdr/ip_hdr.h"
 #include "../net_hdr/icmp_hdr.h"
 #include "../net_if/net_if.h"
+#include "../net_if/address_in.h"
+#include "../net_if/socket.h"
 
 #include "../error.h"
 #include "../timer.h"
 
-#include <netdb.h>
 #include <string.h>
 #include <strings.h>
 #include <stdlib.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <signal.h>
 
 #define IPv4 4
@@ -32,7 +31,9 @@ struct ping_stat
 
 static struct ping
 {
-    struct net_if nif;
+    struct net_if *nif;
+    struct sock sock;
+    struct address addr;
     struct ping_stat stat;
 } ping;
 
@@ -64,21 +65,17 @@ static void interrupt_handler(s32 sig)
     exit(EXIT_SUCCESS);
 }
 
-void ping_init()
+void ping_init(s8* peer_host)
 {
     bzero(&ping, sizeof(struct ping));
 
-    s32 sfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-    if (sfd < 0){
-	   sys_error();
-    }
+    socket_init(&ping.sock, SOCKET_AF_INET, SOCKET_RAW, SOCKET_P_ICMP);
 
-    const s32 val = 1;
-    if (setsockopt(sfd, IPPROTO_IP, IP_HDRINCL, &val, sizeof(s32)) < 0) {
-        sys_error();
-    }
+    socket_opt(&ping.sock, SOCKET_IPHDR);
 
-    net_if_init(&ping.nif, sfd, AF_INET);
+    address_in_init(&ping.addr, SOCKET_AF_INET, SOCKET_UNDEFINE, peer_host, NULL);
+
+    ping.nif = net_if_create(SOCKET_AF_INET);
 
     if (signal(SIGINT, interrupt_handler) == SIG_ERR) {
         sys_error();
@@ -87,17 +84,8 @@ void ping_init()
     srand(time(NULL));
 }
 
-void ping_test(s8* peer_host)
+void ping_test(void)
 {
-    struct addrinfo hint;
-    struct addrinfo *peer_addr;
-    bzero(&hint, sizeof(struct addrinfo));
-    hint.ai_family = AF_INET;
-
-    if (getaddrinfo(peer_host, 0, &hint, &peer_addr) < 0) {
-        gai_error();
-    }
-
     u64 packet_len = sizeof(struct ip_hdr) + sizeof(struct icmp_hdr);
     u8 *send_packet = (u8 *)malloc(packet_len);
     if (send_packet == NULL) {
@@ -110,8 +98,8 @@ void ping_test(s8* peer_host)
 
     bzero(send_packet, sizeof(struct ip_hdr) + sizeof(struct icmp_hdr));
 
-    u32 saddr = net_if_get_pa(&ping.nif);
-    u32 daddr = ((struct sockaddr_in*)(peer_addr->ai_addr))->sin_addr.s_addr;
+    u32 saddr = net_if_get_pa(ping.nif, ping.sock.fd);
+    u32 daddr = ((struct sockaddr_in*)&ping.addr.saddr)->sin_addr.s_addr;
     u16 id = rand() % 255;
     u16 seq = rand() % 255;
 
@@ -144,7 +132,7 @@ void ping_test(s8* peer_host)
         timer_start(&packet_timer);
 
         //TODO: set i+1 icmp seq for each new packet send
-        ssize_t sbytes = sendto(ping.nif.fd, send_packet, packet_len, 0, peer_addr->ai_addr, peer_addr->ai_addrlen);
+        ssize_t sbytes = sendto(ping.sock.fd, send_packet, packet_len, 0, &ping.addr.saddr, ping.addr.socklen);
 	    if (sbytes < 0) {
             sys_error();
     	}
@@ -154,7 +142,7 @@ void ping_test(s8* peer_host)
         ping.stat.transmitted_packets++;
 
         //TODO: make timer for recv that process is not blocked forever
-        ssize_t rbytes = recvfrom(ping.nif.fd, recv_packet, packet_len, 0, NULL, NULL);
+        ssize_t rbytes = recvfrom(ping.sock.fd, recv_packet, packet_len, 0, NULL, NULL);
         if (rbytes < 0) {
             sys_error();
         }

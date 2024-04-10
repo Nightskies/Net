@@ -66,10 +66,11 @@ s32 main(s32 argc, s8 *argv[])
 				if (!check_root()){
 	   				error("ERROR: Only (sudo) run");
     			}
-				ping_init();
-				ping_test(optarg);
+				ping_init(optarg);
+				ping_test();
 				break;
 			case 3:
+				dns_init();
 				dns_resolve(optarg, argv[optind]);
 				break;
 			case 4:

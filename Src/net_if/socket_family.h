@@ -1,0 +1,12 @@
+#ifndef SOCKET_FAMILY_H
+#define SOCKET_FAMILY_H
+
+enum sock_family
+{
+    SOCKET_AF_UNDEFINE,
+    SOCKET_AF_PACKET,
+    SOCKET_AF_INET,
+    SOCKET_AF_INET6,
+};
+
+#endif // SOCKET_FAMILY_H

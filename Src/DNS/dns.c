@@ -1,11 +1,11 @@
 #include "../net_hdr/dns_hdr.h"
+#include "../net_if/net_if.h"
+#include "../net_if/address_in.h"
+#include "../net_if/socket.h"
 
 #include "../error.h"
 
 #include <stdio.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <string.h>
 
 #define DNS_QUERY    0
 #define DNS_RESPONSE 1
@@ -22,8 +22,21 @@
 #define DNS_PORT "53"
 #define ROUTER_IP "192.168.0.1"
 
+static struct dns
+{
+    struct net_if *nif;
+    struct address addr;
+    struct sock sock;
+} dns;
+
 void dns_init(void)
-{}
+{
+    socket_init(&dns.sock, SOCKET_AF_INET, SOCKET_DGRAM, SOCKET_P_UDP);
+
+    address_in_init(&dns.addr, SOCKET_AF_INET, SOCKET_DGRAM, ROUTER_IP, DNS_PORT);
+
+    dns.nif = net_if_create(SOCKET_AF_INET);
+}
 
 void dns_resolve(s8 *host_name, s8 *req_type)
 {
@@ -42,14 +55,6 @@ void dns_resolve(s8 *host_name, s8 *req_type)
         error("Unknown type. Use a, aaaa, txt, mx, or any");
     }
 
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_socktype = SOCK_DGRAM;
-    struct addrinfo *peer_address;
-    if (getaddrinfo(ROUTER_IP, DNS_PORT, &hints, &peer_address)) {
-        gai_error();
-    }
-
     u8 *send_packet = malloc(DNS_PACKET_LEN);
     if (send_packet == NULL) {
         sys_error();
@@ -60,16 +65,10 @@ void dns_resolve(s8 *host_name, s8 *req_type)
         sys_error();
     }
 
-    s32 socket_peer = socket(peer_address->ai_family,
-            peer_address->ai_socktype, peer_address->ai_protocol);
-    if (socket_peer < 0) {
-        sys_error();
-    } 
-
     dns_hdr_fill(send_packet, 45999, DNS_QUERY, DNS_STANDARD_QUERY, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0);
     dns_qst_fill(send_packet + sizeof(struct dns_hdr), host_name, type, 0x01);
 
-    ssize_t sbytes = sendto(socket_peer, send_packet, DNS_PACKET_LEN, 0, peer_address->ai_addr, peer_address->ai_addrlen);
+    ssize_t sbytes = sendto(dns.sock.fd, send_packet, DNS_PACKET_LEN, 0, &dns.addr.saddr, dns.addr.socklen);
     if (sbytes < 0) {
         sys_error();
     }
@@ -77,7 +76,7 @@ void dns_resolve(s8 *host_name, s8 *req_type)
     printf("Sent %ld bytes\nDNS packet:\n", sbytes);
     dns_dump(send_packet);
   
-    ssize_t rbytes = recvfrom(socket_peer, recv_packet, DNS_PACKET_LEN, 0, 0, 0);
+    ssize_t rbytes = recvfrom(dns.sock.fd, recv_packet, DNS_PACKET_LEN, 0, 0, 0);
     if (rbytes < 0) {
         sys_error();
     }

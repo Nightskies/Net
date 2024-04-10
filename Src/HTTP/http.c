@@ -1,51 +1,31 @@
-#include "http.h"
 #include "../net_if/net_if.h"
+#include "../net_if/address_in.h"
+#include "../net_if/socket.h"
 
 #include "../error.h"
 
-#include <netdb.h>
 #include <poll.h>
 #include <time.h>
 
 static struct http
 {
-    struct net_if nif;
+    struct net_if *nif;
+    struct address addr;
+    struct sock sock;
 } http;
 
 void http_init(s8 *hostname, s8 *port)
 {
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_socktype = SOCK_STREAM;
-    struct addrinfo *peer_address;
-    if (getaddrinfo(hostname, port, &hints, &peer_address)) {
-        gai_error();
-    }
+    socket_init(&http.sock, SOCKET_AF_INET, SOCKET_STREAM, SOCKET_P_TCP);
+    address_in_init(&http.addr, SOCKET_AF_INET, SOCKET_STREAM, hostname, port);
 
-    printf("Remote address is: ");
-    char address_buffer[100];
-    char service_buffer[100];
-    if (getnameinfo(peer_address->ai_addr, peer_address->ai_addrlen,
-            address_buffer, sizeof(address_buffer),
-            service_buffer, sizeof(service_buffer),
-            NI_NUMERICHOST) < 0) {
-        gai_error();
-    }
+    http.nif = net_if_create(SOCKET_AF_INET);
 
-    s32 sfd = socket(peer_address->ai_family, peer_address->ai_socktype, peer_address->ai_protocol);
-    if (sfd < 0) {
+    if (connect(http.sock.fd, &http.addr.saddr, http.addr.socklen)) {
         sys_error();
     }
 
-    net_if_init(&http.nif, sfd, AF_INET);
-
-    if (connect(sfd, peer_address->ai_addr, peer_address->ai_addrlen)) {
-        sys_error();
-    }
-
-    freeaddrinfo(peer_address);
-
-     printf("Connected.\n\n");
+    printf("Connected.\n\n");
 }
 
 void http_send_request(s8 *hostname, s8 *port, s8 *path) 
@@ -58,27 +38,28 @@ void http_send_request(s8 *hostname, s8 *port, s8 *path)
     sprintf(buffer + strlen(buffer), "User-Agent: honpwc web_get 1.0\r\n");
     sprintf(buffer + strlen(buffer), "\r\n");
 
-    ssize_t sbytes = send(http.nif.fd, buffer, strlen(buffer), 0);
+    ssize_t sbytes = send(http.sock.fd, buffer, strlen(buffer), 0);
     if (sbytes < 0) {
         sys_error();
     }
-     printf("Sent Headers:\n%s", buffer);
+
+    printf("Sent Headers:\n%s", buffer);
 }
 
 bool http_recv()
 {
     #define RESPONSE_SIZE 32768
-    static char response[RESPONSE_SIZE + 1];
-    static char *end = response + RESPONSE_SIZE;
-    static char *p = response;
-    static char *body = NULL;
-    char *q;
+    static s8 response[RESPONSE_SIZE + 1];
+    static s8 *end = response + RESPONSE_SIZE;
+    static s8 *p = response;
+    static s8 *body = NULL;
+    s8 *q;
 
     enum {length, chunked, connection};
-    int encoding = 0;
-    int remaining = 0;
+    u32 encoding = 0;
+    u32 remaining = 0;
 
-    ssize_t rbytes = recv(http.nif.fd, p, end - p, 0);
+    ssize_t rbytes = recv(http.sock.fd, p, end - p, 0);
     if (rbytes < 1) {
         if (encoding == connection && body) {
             printf("%.*s", (int)(end - body), body);
@@ -165,7 +146,7 @@ void http_test(s8 *url)
 
     struct pollfd pfd;
 
-    pfd.fd = http.nif.fd;
+    pfd.fd = http.sock.fd;
     pfd.events = POLLOUT;
 
     for (;;) {

@@ -3,8 +3,8 @@
 
 #include "../types.h"
 
-void ping_init(void);
+void ping_init(s8* peer_host);
 
-void ping_test(s8* peer_host);
+void ping_test(void);
 
 #endif // PING_H
