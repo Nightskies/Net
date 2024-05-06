@@ -75,8 +75,11 @@ void dns_qst_fill(u8 *packet, u8 *name, u16 qtype, u16 qclass)
 
 void dns_dump(u8 *packet) 
 {
+    size_t packet_offset = 0;
+
     struct dns_hdr *hdr = (struct dns_hdr *)packet;
     printf("ID = %hu\n", ntohs(hdr->id));
+    packet_offset += sizeof(struct dns_hdr);
 
     u32 qr = hdr->qr;
     printf("QR = %u %s\n", hdr->qr, hdr->qr ? "response" : "query");
@@ -160,6 +163,7 @@ void dns_dump(u8 *packet)
             const u8 *name = packet + sizeof(struct dns_hdr);
             const u8 *qflags = dns_print_name(packet, name);
             qst = (struct dns_qst_flags *)qflags;
+            packet_offset = (qflags - packet) + sizeof(struct dns_qst_flags);
             putc('\n', stdout);
             printf("  type: %d\n", ntohs(qst->qtype));
             printf(" class: %d\n", ntohs(qst->qclass));
@@ -172,11 +176,12 @@ void dns_dump(u8 *packet)
             printf("Answer %2d\n", i + 1);
             printf("  name: ");
 
-            u8 *name = (u8 *)qst + sizeof(struct dns_qst_flags);
+            u8 *name = packet + packet_offset;
             const u8 *aflags = dns_print_name(packet, name);
             printf("\n");
 
             ans = (struct dns_ans_flags *)aflags;
+            packet_offset = (aflags - packet) + sizeof(struct dns_ans_flags);
 
             u16 type = ntohs(ans->type);
             printf("  type: %hu\n", type);
@@ -184,6 +189,7 @@ void dns_dump(u8 *packet)
             printf("   ttl: %hu\n", ntohl(ans->ttl));
             u16 rdlen = ntohs(ans->rdlength);
             printf(" rdlen: %hu\n", rdlen);
+            packet_offset += rdlen;
 
             u8 *data = (u8 *)ans + sizeof(struct dns_ans_flags);
             if (rdlen == 4 && type == 1) {
